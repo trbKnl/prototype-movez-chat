@@ -3,10 +3,13 @@ const express = require('express');
 const socketIo = require('socket.io');
 const { Combination } = require('js-combinatorics');
 const { Worker, Queue } = require('bullmq')
-const IORedis = require('ioredis')
+const Redis = require('ioredis')
 
 const crypto = require("crypto")
 const randomId = () => crypto.randomBytes(8).toString("hex")
+
+const { Game, GameStore } = require("./game.js")
+let gameStore = new GameStore(new Redis())
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +18,8 @@ const io = socketIo(server);
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+
 
 // Serve the index.html file
 app.get('/', (req, res) => {
@@ -97,7 +102,7 @@ const waitingQueueWorker = new Worker('waitingQueue', async (job) => {
       players.length = 0
     }
   }, { 
-    connection: new IORedis({
+    connection: new Redis({
       host: "0.0.0.0",
       port: 6379,
       maxRetriesPerRequest: null
@@ -110,7 +115,7 @@ const waitingQueueWorker = new Worker('waitingQueue', async (job) => {
 const gameQueueWorker = new Worker('gameQueue', async (job) => {
   await gameLoop(job.data.players)
   }, { 
-    connection: new IORedis({
+    connection: new Redis({
       host: "0.0.0.0",
       port: 6379,
       maxRetriesPerRequest: null
@@ -143,9 +148,11 @@ async function gameLoop(players) {
 
     // create a game
     let game  = new Game(players)
+    let gameId = randomId()
     game.startGame()
 
     while (game.gameOngoing) {
+
       // get the first round
       let round = game.getRound()
       console.log(round)
@@ -160,8 +167,8 @@ async function gameLoop(players) {
         }
       })
       await sleep(game.duration)
-      console.log("Next round")
       game.nextRound()
+      await gameStore.save(gameId, game)
     }
     players.forEach((player) => {
       io.to(player).emit("game end")
@@ -173,51 +180,4 @@ async function gameLoop(players) {
 }
 
 
-
-// GAME OBJECT
-
-class Game {
-  constructor(players) {
-    if (players.length !== 4) {
-      throw new Error('A game should have exactly 4 players.');
-    }
-    this.players = players;
-    // divide players into rounds
-    let combinations = new Combination(players, 2);
-    this.combinations = [...combinations]
-    this.roundOrder = [[0, 5], [1, 4], [2, 3]]
-    this.currentRound = -1
-    this.gameOngoing = false
-    this.imposter = players[Math.floor(Math.random() * players.length)];
-    this.duration = 5000
-  }
-
-  startGame() {
-    if (this.currentRound !== -1){
-      throw new Error("Game has already started")
-    }
-    this.gameOngoing = true
-    this.currentRound += 1
-  }
-
-  endGame() {
-    this.gameOngoing = false
-  }
-
-  nextRound() {
-    if (this.gameOngoing) {
-      this.currentRound += 1
-      if (this.currentRound >= this.roundOrder.length) {
-        this.endGame()
-      }
-    }
-  }
-
-  getRound() {
-    if (this.gameOngoing) {
-      let pairs = this.roundOrder[this.currentRound]
-      return [this.combinations[pairs[0]], this.combinations[pairs[1]]]
-    }
-  }
-}
 
