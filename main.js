@@ -132,8 +132,6 @@ async function gameLoop(players) {
   /**
  * @param  {Array} players [should be length 4 containing player id's]
  */
-  if (players.length !== 4) { throw new Error('A game should have exactly 4 players.') }
-
   try { // needed for development else you wont see any error messages
     // GAME LOGIC
     let gameOngoing = true

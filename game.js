@@ -4,70 +4,72 @@ const { unpack, pack } = require('msgpackr')
 // GAME OBJECT
 
 class Game {
-  constructor(
-    players = players,
-    combinations = null,
-    imposter = null
-  ) {
-    if (players.length !== 4) {
-      throw new Error('A game should have exactly 4 players.');
+    constructor(
+      players = [],
+      allPairs = null,
+      imposter = null,
+      gameOngoing = true,
+      round = null, 
+      currentRound = 0
+    ) {
+
+    if (allPairs === null) {
+      let combinations = new Combination(players, 2);
+      allPairs = [...combinations]
     }
-    if (combinations === null) {
-      let playerCombinations = new Combination(players, 2);
-      this.combinations = [...playerCombinations]
-    } else {
-      this.combinations = combinations
-    }
+
     if (imposter === null) {
-      this.imposter = players[Math.floor(Math.random() * players.length)];
-    } else {
-      this.imposter = imposter
+      imposter = players[Math.floor(Math.random() * players.length)];
     }
-    this.players = players;
-    this.roundOrder = [[0, 5], [1, 4], [2, 3]]
-    this.currentRound = -1
-    this.gameOngoing = false
+
+    // Initialize class properties
+    this.players = players
+    this.allPairs = allPairs
+    this.imposter = imposter
+    this.gameOngoing = gameOngoing
+    this.round = round
+    this.currentRound = currentRound
     this.duration = 5000
   }
 
-  startGame() {
-    if (this.currentRound !== -1){
-      throw new Error("Game has already started")
-    }
-    this.gameOngoing = true
-    this.currentRound += 1
-  }
-
-  endGame() {
-    this.gameOngoing = false
+  getRound() {
+    return this.round
   }
 
   nextRound() {
-    if (this.gameOngoing) {
-      this.currentRound += 1
-      if (this.currentRound >= this.roundOrder.length) {
-        this.endGame()
+    let currentPlayers = []
+    this.round = []
+
+    if (this.allPairs.length === 0) {
+      this.gameOngoing = false
+      return
+    }
+    for (let i = 0; i < this.allPairs.length; i++) {
+      const pair = this.allPairs[i];
+      const player1 =  pair[0]
+      const player2 =  pair[1]
+      if (!currentPlayers.includes(player1) && !currentPlayers.includes(player2)) {
+        this.round.push(pair)
+        currentPlayers.push(player1, player2)
+        this.allPairs.splice(i, 1)
+        i--
       }
     }
-  }
-
-  getRound() {
-    if (this.gameOngoing) {
-      let pairs = this.roundOrder[this.currentRound]
-      return [this.combinations[pairs[0]], this.combinations[pairs[1]]]
-    }
+    this.currentRound += 1
   }
 
   static createFromObject(game) {
-    const {players, combinations, imposter} = game
-    return new Game(players, combinations, imposter)
+    const{ players, allPairs, imposter, gameOngoing, round, currentRound } = game
+    return new Game( players, allPairs, imposter, gameOngoing, round, currentRound )
   }
 }
 
 
+
+
 const SESSION_TTL = 24 * 60 * 60;
-//const Redis = require("ioredis")
-//let redisClient = new Redis()
+const Redis = require("ioredis")
+let redisClient = new Redis()
 
 
 class GameStore {
@@ -101,15 +103,17 @@ module.exports = {
 };
 
 
-//new Game(["a", "b", "c", "d"])
+
 //
 //
-//var asd = new Game(["a", "b", "c", "d"])
+var asd = new Game(["a", "b", "c", "d"])
 //
-//let store = new GameStore(redisClient)
-//await store.save(1, asd)
-//var check = await store.load(1)
-//check
+let store = new GameStore(redisClient)
+asd.nextRound()
+await store.save(1, asd)
+
+var check = await store.load(1)
+check
 //
 //var check = await store.load(2)
 //check
@@ -125,3 +129,7 @@ module.exports = {
 //unpack(pack(asd))
 //
 //
+//
+//
+//
+
